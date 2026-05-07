@@ -1,0 +1,1729 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telecine · Monitor de Jornada de Compra</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+/* =======================================================
+   DESIGN TOKENS
+======================================================= */
+:root {
+  /* surface */
+  --bg: #F5F4EF;
+  --bg-raised: #FBFAF6;
+  --card: #FFFFFF;
+  --ink: #1B1B19;
+  --ink2: #4B4B47;
+  --ink3: #86867F;
+  --line: rgba(0,0,0,.07);
+  --line-strong: rgba(0,0,0,.14);
+  /* brand */
+  --red: #C8251F;
+  --red-dark: #A61D17;
+  /* semantic */
+  --ok: #1F6B3A;  --ok-bg: #EEF6F0;
+  --wa: #8A5A0E;  --wa-bg: #FCF4E2;
+  --er: #8B1A1A;  --er-bg: #FCEAEA;
+  --in: #1F4590;  --in-bg: #EDF1FB;
+  --pr: #7A5500;  --pr-bg: #FFF8DE;
+  /* shape */
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --shadow-s: 0 1px 2px rgba(0,0,0,.04), 0 1px 1px rgba(0,0,0,.03);
+  --shadow-m: 0 2px 6px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.04);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); font-size: 13px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+button { font-family: inherit; }
+a { color: var(--in); text-decoration: none; }
+a:hover { text-decoration: underline; }
+kbd { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 10px; border: 1px solid var(--line); }
+
+/* =======================================================
+   LAYOUT
+======================================================= */
+.topbar {
+  background: var(--card); border-bottom: 1px solid var(--line);
+  padding: 12px 20px; display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(8px); background: rgba(255,255,255,.92);
+}
+.brand { display: flex; align-items: center; gap: 11px; }
+.logo {
+  width: 34px; height: 34px; background: var(--red); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(200,37,31,.2);
+}
+.logo svg { width: 18px; height: 18px; fill: #fff; }
+.brand h1 { font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.brand .sub { font-size: 11px; color: var(--ink3); margin-top: 1px; }
+
+.toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.btn {
+  border: none; border-radius: 7px; padding: 7px 13px; font-size: 12px; font-weight: 500;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+  transition: all .15s ease; white-space: nowrap;
+}
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn--ghost { background: transparent; color: var(--ink2); border: 1px solid var(--line); }
+.btn--ghost:hover:not(:disabled) { background: var(--bg); border-color: var(--line-strong); color: var(--ink); }
+.btn--dark { background: var(--ink); color: #fff; }
+.btn--dark:hover:not(:disabled) { background: #2d2d2a; }
+.btn--primary { background: var(--red); color: #fff; }
+.btn--primary:hover:not(:disabled) { background: var(--red-dark); }
+.divider { width: 1px; height: 18px; background: var(--line); }
+
+.page { max-width: 1380px; margin: 0 auto; padding: 20px; }
+
+/* =======================================================
+   KPI ROW
+======================================================= */
+.kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 20px; }
+.kpi {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-m);
+  padding: 11px 14px; box-shadow: var(--shadow-s); position: relative;
+}
+.kpi-lbl {
+  font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink3); margin-bottom: 4px;
+}
+.kpi-val { font-size: 24px; font-weight: 600; line-height: 1; letter-spacing: -.02em; }
+.kpi-val.neu { color: var(--ink); }
+.kpi-val.ok  { color: var(--ok); }
+.kpi-val.wa  { color: var(--wa); }
+.kpi-val.er  { color: var(--er); }
+.kpi-val.in  { color: var(--in); }
+.kpi-sub { font-size: 10px; color: var(--ink3); margin-top: 3px; }
+
+/* =======================================================
+   SECTION
+======================================================= */
+.sec-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px; gap: 10px; flex-wrap: wrap;
+}
+.sec-title {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink3);
+}
+.sec-meta { font-size: 10.5px; color: var(--ink3); }
+.sec-meta strong { color: var(--ink2); font-weight: 600; }
+
+.group-head {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--ink3); padding: 14px 0 6px; display: flex; align-items: center; gap: 10px;
+}
+.group-head::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.group-head .count { color: var(--ink3); font-weight: 500; font-size: 10px; }
+
+/* =======================================================
+   CHANNEL CARD
+======================================================= */
+.cards { display: flex; flex-direction: column; gap: 8px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-m);
+  box-shadow: var(--shadow-s); overflow: hidden;
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.card:hover { box-shadow: var(--shadow-m); }
+.card.st-ok   { border-left: 3px solid var(--ok); }
+.card.st-wa   { border-left: 3px solid #D89010; }
+.card.st-er   { border-left: 3px solid var(--er); }
+.card.st-idle { border-left: 3px solid var(--line-strong); }
+.card.st-chk  { border-left: 3px solid var(--in); }
+
+.card-main {
+  display: grid; grid-template-columns: minmax(180px, 220px) 1fr minmax(110px, auto);
+  gap: 0;
+}
+
+/* identity column */
+.ch-id { padding: 14px 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; justify-content: center; }
+.ch-name { font-weight: 600; font-size: 13.5px; letter-spacing: -.005em; color: var(--ink); }
+.ch-host { font-size: 10.5px; color: var(--ink3); word-break: break-word; }
+.ch-kind {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  padding: 2px 8px; border-radius: 20px; border: 1px solid; margin-top: 4px; width: fit-content;
+}
+.kind-s { border-color: #B9D0F5; background: #EEF3FE; color: var(--in); }
+.kind-t { border-color: #A3D389; background: #EFF8E7; color: #2A6218; }
+.kind-i { border-color: #F0CB8B; background: #FFF5DD; color: var(--wa); }
+
+/* metrics column */
+.ch-metrics {
+  padding: 14px 16px; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px 18px; align-items: start;
+}
+.metric { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.metric-lbl {
+  font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink3);
+}
+.metric-val { font-size: 13px; font-weight: 500; color: var(--ink); line-height: 1.35; }
+.metric-val.big { font-size: 14px; font-weight: 600; }
+.metric-val.muted { color: var(--ink3); font-style: italic; font-size: 11.5px; }
+.metric-val.price { color: var(--ok); font-weight: 600; }
+.metric-val.promo { color: var(--pr); font-weight: 600; }
+.metric-val.price-hidden { color: var(--wa); }
+.metric-sub { font-size: 10px; color: var(--ink3); line-height: 1.4; margin-top: 1px; }
+.metric-inline { display: inline-flex; align-items: center; gap: 4px; }
+.check { color: var(--ok); font-weight: 600; }
+.xmark { color: var(--wa); font-weight: 600; }
+
+/* health score */
+.health-score { display: flex; align-items: center; gap: 7px; }
+.health-bar {
+  width: 60px; height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; flex-shrink: 0;
+}
+.health-fill { height: 100%; border-radius: 3px; transition: width .4s ease; }
+.health-fill.ok { background: var(--ok); }
+.health-fill.wa { background: #D89010; }
+.health-fill.er { background: var(--er); }
+.health-num { font-size: 13px; font-weight: 600; min-width: 30px; }
+
+/* friction score */
+.score-dots { display: inline-flex; gap: 3px; align-items: center; }
+.score-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.score-label { font-size: 10.5px; color: var(--ink3); margin-left: 3px; }
+
+/* status column */
+.ch-status {
+  padding: 14px 16px; border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between;
+  gap: 10px; min-width: 130px;
+}
+.status-pill {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
+  font-size: 11px; font-weight: 600; border-radius: 20px; white-space: nowrap;
+}
+.pill-ok   { background: var(--ok-bg); color: var(--ok); }
+.pill-wa   { background: var(--wa-bg); color: var(--wa); }
+.pill-er   { background: var(--er-bg); color: var(--er); }
+.pill-idle { background: var(--bg); color: var(--ink3); }
+.pill-chk  { background: var(--in-bg); color: var(--in); }
+.pill-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.dot-ok   { background: var(--ok); }
+.dot-wa   { background: #D89010; }
+.dot-er   { background: var(--er); }
+.dot-idle { background: var(--ink3); }
+.dot-chk  { background: var(--in); animation: dot-pulse 1s infinite; }
+@keyframes dot-pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+.verify-btn {
+  font-size: 10.5px; padding: 5px 10px; border-radius: 5px; border: 1px solid var(--line);
+  background: transparent; color: var(--ink3); cursor: pointer; font-weight: 500;
+  transition: all .15s ease;
+}
+.verify-btn:hover:not(:disabled) {
+  background: var(--bg); color: var(--ink); border-color: var(--line-strong);
+}
+.verify-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+/* expandable detail */
+.card-detail {
+  border-top: 1px solid var(--line); padding: 12px 16px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px;
+  background: var(--bg-raised);
+}
+.detail-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.detail-item.full { grid-column: 1 / -1; }
+.detail-lbl {
+  font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink3);
+}
+.detail-val { font-size: 11.5px; color: var(--ink2); line-height: 1.55; word-break: break-word; }
+.detail-val.ok { color: #144A25; }
+.detail-val.wa { color: #5A3600; }
+.detail-val.er { color: #651414; }
+.detail-val a { font-size: 11px; word-break: break-all; }
+
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.tag {
+  font-size: 9.5px; font-weight: 500; padding: 2px 7px; border-radius: 10px; border: 1px solid;
+}
+.tag-ok   { border-color: #A3D389; background: #EFF8E7; color: #2A6218; }
+.tag-wa   { border-color: #F0CB8B; background: #FFF5DD; color: var(--wa); }
+.tag-er   { border-color: #E09B9B; background: #FFF2F2; color: var(--er); }
+.tag-in   { border-color: #B9D0F5; background: #EEF3FE; color: var(--in); }
+.tag-pr   { border-color: #E8C600; background: #FFFBE4; color: var(--pr); font-weight: 600; }
+
+.src-stamp {
+  font-size: 9.5px; color: var(--ink3); font-style: italic; margin-top: 4px;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+
+/* dimensions grid (inside detail) */
+.dims-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 16px; padding: 2px 0;
+}
+.dim {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 7px;
+}
+.dim-lbl {
+  font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink3);
+}
+.dim-val { font-size: 11.5px; font-weight: 500; color: var(--ink); line-height: 1.35; }
+.dim-val.good { color: var(--ok); }
+.dim-val.warn { color: var(--wa); }
+.dim-val.bad  { color: var(--er); }
+
+/* =======================================================
+   LOG
+======================================================= */
+.log-wrap {
+  margin-top: 18px; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-m); overflow: hidden;
+}
+.log-head {
+  padding: 8px 14px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.log-head span {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink3);
+}
+.log-body { padding: 8px 14px; max-height: 160px; overflow-y: auto; }
+.log-line {
+  font-size: 10.5px; font-family: 'SF Mono', Menlo, 'Fira Code', monospace;
+  line-height: 1.55; color: var(--ink3);
+}
+.log-line.info { color: #1F4590; }
+.log-line.ok   { color: #1F6B3A; }
+.log-line.err  { color: #8B1A1A; }
+.log-line.warn { color: #8A5A0E; }
+
+/* =======================================================
+   MODAL / OVERLAY
+======================================================= */
+.overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.38);
+  z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(4px);
+}
+.overlay.show { display: flex; }
+.overlay-box {
+  background: var(--card); border-radius: 12px; padding: 22px 28px;
+  text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.18); min-width: 220px;
+}
+.overlay-box p { font-size: 13px; font-weight: 500; }
+.overlay-box small { font-size: 11px; color: var(--ink3); display: block; margin-top: 4px; }
+
+.share {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.42);
+  z-index: 300; align-items: center; justify-content: center;
+}
+.share.show { display: flex; }
+.share-box {
+  background: var(--card); border-radius: var(--radius-l); width: 500px; max-width: 95vw;
+  overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.share-hd {
+  background: var(--red); padding: 14px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.share-hd h2 { color: #fff; font-size: 13.5px; font-weight: 600; }
+.share-close {
+  background: none; border: none; color: rgba(255,255,255,.8); font-size: 22px;
+  cursor: pointer; line-height: 1; padding: 0 4px;
+}
+.share-close:hover { color: #fff; }
+.share-bd { padding: 18px; }
+.share-note {
+  font-size: 11.5px; color: var(--ink3); line-height: 1.6;
+  background: var(--bg); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px;
+}
+.share-lbl {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink2); margin-bottom: 6px;
+}
+.email-field {
+  display: flex; flex-wrap: wrap; gap: 5px; border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 9px; background: var(--card); cursor: text;
+  min-height: 40px; margin-bottom: 6px; transition: border-color .15s ease;
+}
+.email-field:focus-within { border-color: var(--line-strong); }
+.email-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--in-bg); color: var(--in); border-radius: 20px; padding: 3px 10px;
+  font-size: 11.5px; font-weight: 500;
+}
+.email-tag.bad { background: var(--er-bg); color: var(--er); }
+.email-rm {
+  background: none; border: none; color: inherit; cursor: pointer;
+  font-size: 14px; line-height: 1; opacity: .65;
+}
+.email-rm:hover { opacity: 1; }
+.email-input {
+  border: none; outline: none; font-size: 12.5px; flex: 1; min-width: 160px;
+  color: var(--ink); background: transparent;
+}
+.share-hint { font-size: 10.5px; color: var(--ink3); margin-bottom: 14px; }
+.share-msg {
+  width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px;
+  font-size: 11.5px; font-family: inherit; color: var(--ink);
+  resize: vertical; min-height: 80px; outline: none; background: var(--card);
+  line-height: 1.55;
+}
+.share-msg:focus { border-color: var(--line-strong); }
+.share-steps {
+  margin-top: 12px; font-size: 11.5px; color: var(--wa);
+  background: var(--wa-bg); border-radius: 8px; padding: 10px 12px; line-height: 1.75;
+}
+.share-result {
+  margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 11.5px; display: none;
+}
+.share-result.ok  { background: var(--ok-bg); color: var(--ok); display: block; }
+.share-result.err { background: var(--er-bg); color: var(--er); display: block; }
+.share-footer {
+  display: flex; justify-content: flex-end; gap: 7px; margin-top: 14px; flex-wrap: wrap;
+}
+
+/* =======================================================
+   UTILS
+======================================================= */
+.spin { animation: spin .7s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.fade-in { animation: fade .25s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+
+/* =======================================================
+   MOBILE
+======================================================= */
+@media (max-width: 720px) {
+  .topbar { padding: 10px 14px; }
+  .brand .sub { display: none; }
+  .toolbar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; width: 100%; }
+  .toolbar .divider { display: none; }
+  .btn { font-size: 11px; padding: 8px 6px; justify-content: center; }
+  .btn--primary { grid-column: 1 / -1; padding: 10px; font-size: 12.5px; }
+  .btn--dark { grid-column: 1 / -1; }
+
+  .page { padding: 14px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .kpi-val { font-size: 22px; }
+
+  .card-main { display: flex; flex-direction: column; }
+  .ch-id {
+    border-right: none; border-bottom: 1px solid var(--line);
+    flex-direction: row; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap;
+  }
+  .ch-metrics { grid-template-columns: 1fr 1fr; }
+  .ch-status {
+    border-left: none; border-top: 1px solid var(--line);
+    flex-direction: row; align-items: center; justify-content: space-between;
+    min-width: 0;
+  }
+  .card-detail { grid-template-columns: 1fr; gap: 10px; }
+  .dims-grid { grid-template-columns: 1fr 1fr; }
+
+  .share { align-items: flex-end; }
+  .share-box {
+    width: 100%; max-width: 100%; border-radius: 16px 16px 0 0;
+    max-height: 92vh; overflow-y: auto;
+  }
+  .share-footer .btn { flex: 1; justify-content: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================ HEADER ============================================ -->
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M4 5h16v3H4zm2 5h12v2H6zm3 4h6v3H9z"/></svg>
+    </div>
+    <div>
+      <h1>Monitor de Jornada de Compra · Telecine</h1>
+      <div class="sub">Qualidade da experiência de compra · preços · diagnóstico por canal</div>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="btn btn--ghost" id="btnXls" onclick="exp.xls()" disabled>⬇ XLS</button>
+    <button class="btn btn--ghost" id="btnPdf" onclick="exp.pdf()" disabled>⬇ PDF</button>
+    <button class="btn btn--ghost" id="btnImg" onclick="exp.img()" disabled>⬇ Imagem</button>
+    <div class="divider"></div>
+    <button class="btn btn--dark" onclick="share.open()">✉ Compartilhar</button>
+    <div class="divider"></div>
+    <button class="btn btn--primary" id="runBtn" onclick="scan.runAll()">
+      <span id="runIcon">▶</span> Verificar todos
+    </button>
+  </div>
+</header>
+
+<main class="page">
+
+  <!-- ============================================ KPIs ============================================ -->
+  <section class="kpi-grid" id="kpis"></section>
+
+  <!-- ============================================ SECTION TITLE ============================================ -->
+  <div class="sec-head">
+    <span class="sec-title">Canais de venda</span>
+    <span class="sec-meta" id="secMeta"></span>
+  </div>
+
+  <!-- ============================================ CHANNELS ============================================ -->
+  <div id="channelsRoot"></div>
+
+  <!-- ============================================ LOG ============================================ -->
+  <section class="log-wrap" id="logWrap" style="display:none">
+    <div class="log-head">
+      <span>Log da verificação</span>
+      <button class="btn btn--ghost" style="font-size:10px;padding:3px 9px" onclick="document.getElementById('logWrap').style.display='none'">Fechar</button>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </section>
+
+</main>
+
+<!-- ============================================ OVERLAY ============================================ -->
+<div class="overlay" id="overlay">
+  <div class="overlay-box">
+    <p id="overlayMsg">Gerando…</p>
+    <small>Aguarde um instante</small>
+  </div>
+</div>
+
+<!-- ============================================ SHARE MODAL ============================================ -->
+<div class="share" id="shareModal" onclick="share.bgClose(event)">
+  <div class="share-box">
+    <div class="share-hd">
+      <h2>✉ Compartilhar monitor</h2>
+      <button class="share-close" onclick="share.close()">×</button>
+    </div>
+    <div class="share-bd">
+      <div class="share-note">
+        Este app é um arquivo <strong>.html</strong> offline. Informe os emails, abra seu email pré-preenchido e anexe o arquivo que você baixou com <strong>⬇</strong>.
+      </div>
+      <div class="share-lbl">Destinatários</div>
+      <div class="email-field" id="emailField" onclick="share.focus()">
+        <input class="email-input" id="emailInput"
+          placeholder="email@exemplo.com e pressione Enter"
+          onkeydown="share.keyHandler(event)" onblur="share.commit()"
+          autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
+      </div>
+      <div class="share-hint">Pressione <kbd>Enter</kbd> ou vírgula após cada email.</div>
+      <div class="share-lbl">Mensagem</div>
+      <textarea class="share-msg" id="shareMsg" rows="3">Olá! Compartilhando o Monitor de Jornada de Compra do Telecine.
+
+O arquivo HTML abre direto no navegador (sem instalação) e verifica a qualidade da experiência de compra em cada canal de venda: links, preços, fricção na jornada e diagnóstico com ações sugeridas.
+
+Basta abrir o arquivo .html em qualquer navegador.</textarea>
+      <div class="share-steps">
+        <strong>Como usar:</strong> 1· Adicione emails · 2· Clique "Abrir no email" · 3· Anexe o arquivo <code style="font-size:10px;background:rgba(0,0,0,.06);padding:1px 4px;border-radius:3px">telecine_jornada.html</code> · 4· Envie
+      </div>
+      <div class="share-result" id="shareResult"></div>
+      <div class="share-footer">
+        <button class="btn btn--ghost" onclick="share.close()">Cancelar</button>
+        <button class="btn btn--ghost" onclick="share.copy()">⎘ Copiar emails</button>
+        <button class="btn btn--primary" onclick="share.mailto()">✉ Abrir no email</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   MODULE: DATA — channels catalog with baseline April 2026
+═══════════════════════════════════════════════════════════ */
+const CATALOG = {
+  groups: [
+    {
+      id: 'owned',
+      label: 'Canais proprietários · streaming direto',
+      channels: [
+        {
+          id: 'vitrine', name: 'Telecine Oficial', host: 'vitrine.globo.com',
+          kind: 'streaming', kindLabel: 'Streaming direto',
+          url: 'https://vitrine.globo.com/telecine',
+          baseline: {
+            status: 'ok',
+            price: { value: 'R$ 29,90/mês', detail: 'Avulso · ou R$ 19,90/mês no plano anual', hasPromo: false },
+            journey: {
+              stepsToCheckout: 3, priceVisible: true, requiresCEP: false,
+              requiresLogin: false, ctaClarity: 5, friction: 1,
+              estimatedTime: '~2 min', offersPromo: false
+            },
+            situation: 'Página de venda direta do Telecine. Link leva à seleção de plano e checkout.',
+            rationale: 'Canal proprietário principal (Globo). Globo adquiriu 100% do Telecine em nov/2024 — canal direto, sem intermediários.',
+            recommendation: 'Funcionando com jornada limpa. Monitorar reajustes de preço pós-aquisição total pela Globo.',
+            tags: [{c:'tag-ok',l:'Link direto'},{c:'tag-ok',l:'Preço visível'},{c:'tag-in',l:'Canal proprietário'}],
+            source: 'Verificado abr/2026'
+          }
+        },
+        {
+          id: 'globoplay', name: 'Globoplay', host: 'globoplay.globo.com/assine',
+          kind: 'streaming', kindLabel: 'Streaming direto',
+          url: 'https://globoplay.globo.com/assine/',
+          baseline: {
+            status: 'ok',
+            price: { value: 'R$ 29,90/mês (anual)', detail: 'Padrão + Telecine anual · Mensal: R$ 47,90 · Premium + Telecine: R$ 63,90', hasPromo: false },
+            journey: {
+              stepsToCheckout: 4, priceVisible: true, requiresCEP: false,
+              requiresLogin: false, ctaClarity: 4, friction: 2,
+              estimatedTime: '~3 min', offersPromo: false
+            },
+            situation: 'Página /assine lista todos os planos Globoplay. Telecine é add-on no mesmo checkout.',
+            rationale: 'Confirmado abr/2026 (Fast Company, Canaltech): Combo Padrão+Telecine anual = R$29,90/mês (R$358,80/ano), mensal = R$47,90. Múltiplas variações de plano.',
+            recommendation: 'Funcionando. Combos mudam frequentemente — verificar preços semanalmente. Considerar simplificar quantidade de combos visíveis.',
+            tags: [{c:'tag-ok',l:'Link ativo'},{c:'tag-ok',l:'Preço visível'},{c:'tag-in',l:'Múltiplos combos'},{c:'tag-wa',l:'Muitas opções'}],
+            source: 'Fast Company + Canaltech · abr/2026'
+          }
+        },
+        {
+          id: 'amazon', name: 'Amazon Prime Video Channels', host: 'primevideo.com · Channels',
+          kind: 'streaming', kindLabel: 'Streaming direto',
+          url: 'https://www.primevideo.com/offers/?benefitId=telecine',
+          baseline: {
+            status: 'ok',
+            price: { value: 'R$ 29,90/mês', detail: 'Adicional ao Prime · trial 7 dias grátis · só on-demand', hasPromo: false },
+            journey: {
+              stepsToCheckout: 4, priceVisible: true, requiresCEP: false,
+              requiresLogin: true, ctaClarity: 5, friction: 2,
+              estimatedTime: '~3 min', offersPromo: true
+            },
+            situation: 'URL leva ao canal Telecine no Prime Channels com preço e CTA "Comece seu teste grátis de 7 dias".',
+            rationale: 'Canal ativo desde jul/2023. Confirmado em TechTudo mar/2026. Somente catálogo on-demand (sem 6 canais lineares).',
+            recommendation: 'Funcionando com trial. Atenção: requer Prime ativo — usuário sem Prime precisa assinar dois produtos.',
+            tags: [{c:'tag-ok',l:'Trial 7 dias'},{c:'tag-wa',l:'Requer Prime'},{c:'tag-wa',l:'Só on-demand'}],
+            source: 'TechTudo · mar/2026'
+          }
+        }
+      ]
+    },
+    {
+      id: 'telcos',
+      label: 'Operadoras de telecomunicações',
+      channels: [
+        {
+          id: 'sky', name: 'SKY', host: 'sky.com.br · canal adicional',
+          kind: 'telco', kindLabel: 'Operadora TV',
+          url: 'https://www.sky.com.br/canais-adicionais/telecine',
+          baseline: {
+            status: 'ok',
+            price: { value: 'R$ 9,90/mês ★', detail: '12 meses a R$9,90 · depois R$19,90/mês · PROMO válida até 13/04/2026', hasPromo: true },
+            journey: {
+              stepsToCheckout: 3, priceVisible: true, requiresCEP: false,
+              requiresLogin: false, ctaClarity: 5, friction: 2,
+              estimatedTime: '~4 min (liga 10611)', offersPromo: true
+            },
+            situation: 'Página ativa com oferta promocional em destaque (R$9,90/mês). 6 canais ao vivo + SKY+. Contratação final por telefone (10611).',
+            rationale: 'Verificado direto em sky.com.br (abr/2026): promoção "R$9,90 por 12 meses" ativa, válida 31/03 a 13/04/2026. Depois volta para R$19,90/mês. Adicional para assinantes Pós-Pago.',
+            recommendation: 'URGENTE: promoção vence em 13/04/2026. Programar verificação automática nessa data + alinhar novo valor com time comercial.',
+            tags: [{c:'tag-pr',l:'Promo até 13/04/2026'},{c:'tag-ok',l:'Preço em destaque'},{c:'tag-in',l:'6 canais ao vivo'},{c:'tag-wa',l:'Fechamento por telefone'}],
+            source: 'sky.com.br · verificado abr/2026'
+          }
+        },
+        {
+          id: 'claro', name: 'Claro TV+', host: 'claro.com.br/tv',
+          kind: 'telco', kindLabel: 'Operadora TV',
+          url: 'https://www.claro.com.br/tv/telecine',
+          baseline: {
+            status: 'wa',
+            price: { value: 'R$ 29,90/mês', detail: 'Adicional ao Claro TV+ · anual via Globoplay: R$23,90/mês', hasPromo: false },
+            journey: {
+              stepsToCheckout: 5, priceVisible: false, requiresCEP: true,
+              requiresLogin: false, ctaClarity: 3, friction: 3,
+              estimatedTime: '~5-7 min', offersPromo: false
+            },
+            situation: 'URL descreve o produto mas o botão de contratar pode exigir simulação por CEP antes do preço final e do checkout.',
+            rationale: 'Produto ativo. Porém a URL /tv/telecine fragmenta o funil: exige CEP para confirmar disponibilidade antes de apresentar preço e botão de contratar. Alternativa mais direta: /claro-tv-mais/assinar/telecine.',
+            recommendation: 'Testar /claro-tv-mais/assinar/telecine como URL principal. Garantir que preço apareça antes da barreira do CEP. Considerar checkout direto para não-clientes Claro.',
+            tags: [{c:'tag-wa',l:'CEP antes do preço'},{c:'tag-wa',l:'Funil fragmentado'},{c:'tag-ok',l:'Produto ativo'},{c:'tag-in',l:'6 canais ao vivo'}],
+            source: 'Verificação manual · abr/2026'
+          }
+        },
+        {
+          id: 'vivo_tv', name: 'Vivo TV', host: 'vivo.com.br · TV a cabo',
+          kind: 'telco', kindLabel: 'Operadora TV',
+          url: 'https://vivo.com.br/para-voce/produtos-e-servicos/para-casa/tv/canais-adicionais/telecine',
+          baseline: {
+            status: 'wa',
+            price: { value: 'R$ 29,90/mês', detail: 'Adicional ao Vivo TV · disponibilidade por CEP', hasPromo: false },
+            journey: {
+              stepsToCheckout: 6, priceVisible: false, requiresCEP: true,
+              requiresLogin: true, ctaClarity: 2, friction: 4,
+              estimatedTime: '~8-10 min', offersPromo: false
+            },
+            situation: 'Página descreve o produto, mas jornada exige CEP + validação de viabilidade técnica + ser cliente Vivo TV antes de preço e checkout.',
+            rationale: 'Alto atrito: tripla barreira (CEP + viabilidade + ser cliente existente). Não há jornada direta para novos assinantes ou assinantes que querem só o streaming Telecine.',
+            recommendation: 'Avaliar URL alternativa com menos atrito. Verificar se o App Vivo (Meu Vivo) permite contratação mais direta. Considerar landing page dedicada para não-clientes.',
+            tags: [{c:'tag-wa',l:'CEP + viabilidade'},{c:'tag-wa',l:'Só clientes Vivo'},{c:'tag-er',l:'Alto atrito'},{c:'tag-ok',l:'Produto ativo'}],
+            source: 'Verificação manual · abr/2026'
+          }
+        },
+        {
+          id: 'vivo_app', name: 'Vivo App Store', host: 'appstore.vivo.com.br',
+          kind: 'streaming', kindLabel: 'App Store',
+          url: 'https://appstore.vivo.com.br/sc/br/vivostore/detallev/telecine/62647',
+          baseline: {
+            status: 'ok',
+            price: { value: 'A partir de R$ 20,90/mês', detail: 'Cobrança na fatura Vivo · sem TV a cabo · promoções rotativas (ex. 3 meses grátis)', hasPromo: true },
+            journey: {
+              stepsToCheckout: 3, priceVisible: true, requiresCEP: false,
+              requiresLogin: true, ctaClarity: 4, friction: 2,
+              estimatedTime: '~3 min', offersPromo: true
+            },
+            situation: 'URL leva à página do Telecine na Vivo App Store com preço e CTA de assinar. Cobrança integrada na fatura Vivo.',
+            rationale: 'Confirmado ativo. Acesso ao streaming via Globoplay após contratação. Promoções frequentes para novos assinantes.',
+            recommendation: 'Funcionando. Verificar qual promoção está ativa no momento — Vivo alterna ofertas mensalmente.',
+            tags: [{c:'tag-ok',l:'Link ativo'},{c:'tag-ok',l:'Preço visível'},{c:'tag-in',l:'Cobrança na fatura'},{c:'tag-in',l:'Sem TV a cabo'}],
+            source: 'appstore.vivo.com.br · mar/2026'
+          }
+        },
+        {
+          id: 'brisanet', name: 'Brisanet', host: 'brisanet.com.br',
+          kind: 'telco', kindLabel: 'ISP regional',
+          url: 'https://www.brisanet.com.br/streaming/assine-telecine-combo-internet-fibra-optica',
+          baseline: {
+            status: 'wa',
+            price: { value: 'Combo c/ fibra', detail: 'Último registro: combo 400 MEGA ≈ R$89,99/mês · só Nordeste', hasPromo: false },
+            journey: {
+              stepsToCheckout: 5, priceVisible: false, requiresCEP: true,
+              requiresLogin: false, ctaClarity: 3, friction: 3,
+              estimatedTime: '~6-8 min', offersPromo: false
+            },
+            situation: 'Página ativa de combo fibra+Telecine. Disponibilidade restrita ao Nordeste (CE, RN, PB, PE). Preço final depende de CEP.',
+            rationale: 'Parceria Brisanet mantida. Preço sem CEP não é visível. Cobertura geográfica limitada — não é canal nacional de aquisição.',
+            recommendation: 'Verificar preço atual do combo via Brisanet. Classificar como canal regional, não nacional, nos relatórios.',
+            tags: [{c:'tag-ok',l:'Link ativo'},{c:'tag-wa',l:'Só Nordeste'},{c:'tag-wa',l:'Preço sem CEP invisível'}],
+            source: 'Pesquisa · abr/2026'
+          }
+        },
+        {
+          id: 'tim', name: 'TIM', host: 'Parceria encerrada',
+          kind: 'telco', kindLabel: 'Operadora',
+          url: 'https://www.tim.com.br/', skip: true,
+          baseline: {
+            status: 'er',
+            price: null,
+            journey: {
+              stepsToCheckout: 0, priceVisible: false, requiresCEP: false,
+              requiresLogin: false, ctaClarity: 0, friction: 5,
+              estimatedTime: '—', offersPromo: false
+            },
+            situation: 'Parceria TIM/Telecine encerrada. Não é possível assinar Telecine pela TIM.',
+            rationale: 'Parceria formalmente descontinuada. Clientes ativos foram migrados ou cancelados. A TIM não oferece mais o produto.',
+            recommendation: 'Atualizar documentação interna. Redirecionar usuários TIM para Globoplay, Amazon Prime ou outras operadoras ativas.',
+            tags: [{c:'tag-er',l:'Parceria encerrada'},{c:'tag-er',l:'Sem contratação nova'}],
+            source: 'Ajuda Globo · confirmado'
+          }
+        }
+      ]
+    },
+    {
+      id: 'isps',
+      label: 'Plataformas ISP & distribuidores',
+      channels: [
+        {
+          id: 'alloha', name: 'Alloha Fibra · Giga+ TV', host: 'giga.com.br',
+          kind: 'isp', kindLabel: 'ISP parceiro',
+          url: 'https://giga.com.br/planos/giga-tv',
+          baseline: {
+            status: 'ok',
+            price: { value: 'R$ 80/mês', detail: 'Pacote Giga+ TV Cinema: 6 canais Telecine + HBO Max + Paramount+', hasPromo: false },
+            journey: {
+              stepsToCheckout: 4, priceVisible: true, requiresCEP: true,
+              requiresLogin: false, ctaClarity: 4, friction: 3,
+              estimatedTime: '~5 min', offersPromo: false
+            },
+            situation: 'Giga+ TV (Alloha Fibra) lançado ago/2025. Telecine incluído no pacote Cinema (R$80/mês). Exclusivo para clientes de banda larga Alloha (864 cidades).',
+            rationale: 'Parceria via Watch Brasil. Pacote Cinema inclui 6 canais Telecine ao vivo + outras plataformas. Confirmado ativo (TELETIME, ago/2025).',
+            recommendation: 'Funcionando. Cobertura ampla mas restrita a clientes Alloha. Monitorar se URL oficial /planos/giga-tv permanece estável.',
+            tags: [{c:'tag-ok',l:'Link ativo'},{c:'tag-in',l:'864 cidades'},{c:'tag-wa',l:'Só clientes Alloha'},{c:'tag-in',l:'6 canais ao vivo'}],
+            source: 'TELETIME · ago/2025'
+          }
+        },
+        {
+          id: 'ligga', name: 'Ligga Play', host: 'ligga.com.br · Paraná',
+          kind: 'isp', kindLabel: 'ISP parceiro',
+          url: 'https://www.ligga.com.br/ligga-play',
+          baseline: {
+            status: 'wa',
+            price: { value: 'Add-on a la carte', detail: 'Sobre planos Ligga Play (R$109,80+/mês) · preço individual não publicado', hasPromo: false },
+            journey: {
+              stepsToCheckout: 6, priceVisible: false, requiresCEP: true,
+              requiresLogin: true, ctaClarity: 2, friction: 4,
+              estimatedTime: '~8 min', offersPromo: false
+            },
+            situation: 'Ligga Play (ago/2025) oferece Telecine como add-on à la carte. Exclusivo para clientes fibra Ligga no Paraná. Preço individual do add-on não está publicado.',
+            rationale: 'Parceria Watch Brasil. Requer ser cliente Ligga + fazer upgrade de plano + adicionar Telecine. Preço unitário não transparente.',
+            recommendation: 'Negociar com Ligga para exibir preço do add-on Telecine publicamente. Considerar landing page dedicada para novos clientes.',
+            tags: [{c:'tag-wa',l:'Preço não público'},{c:'tag-wa',l:'Só clientes Ligga/PR'},{c:'tag-in',l:'Lançado ago/2025'}],
+            source: 'TELETIME + Gazeta do Povo · ago/2025'
+          }
+        },
+        {
+          id: 'alares', name: 'Alares Play', host: 'alaresplay.alares.com.br',
+          kind: 'isp', kindLabel: 'ISP parceiro',
+          url: 'https://alaresplay.alares.com.br/',
+          baseline: {
+            status: 'wa',
+            price: { value: 'Add-on na fatura', detail: 'Planos a partir de R$9,90 · Telecine integrado à fatura', hasPromo: false },
+            journey: {
+              stepsToCheckout: 5, priceVisible: false, requiresCEP: true,
+              requiresLogin: true, ctaClarity: 3, friction: 3,
+              estimatedTime: '~6 min', offersPromo: false
+            },
+            situation: 'Alares Play (jul/2025, ~800k clientes) inclui Telecine como add-on. Exclusivo para assinantes Alares.',
+            rationale: 'Parceria Watch Brasil. Preço exato do add-on Telecine não está listado publicamente — requer login ou contato comercial.',
+            recommendation: 'Solicitar publicação do preço do Telecine. Mapear jornada de contratação do add-on no app Alares.',
+            tags: [{c:'tag-wa',l:'Preço não visível'},{c:'tag-wa',l:'Só clientes Alares'},{c:'tag-in',l:'Lançado jul/2025'}],
+            source: 'TELAVIVA · jul/2025'
+          }
+        },
+        {
+          id: 'vero', name: 'Vero Internet', host: 'querovero.com.br',
+          kind: 'isp', kindLabel: 'ISP parceiro',
+          url: 'https://querovero.com.br/para-voce/servicos/telecine',
+          baseline: {
+            status: 'wa',
+            price: { value: 'Incluso em planos', detail: 'Telecine incluso em pacotes Vero fibra · valor varia por plano/região', hasPromo: false },
+            journey: {
+              stepsToCheckout: 5, priceVisible: false, requiresCEP: true,
+              requiresLogin: false, ctaClarity: 3, friction: 3,
+              estimatedTime: '~5 min', offersPromo: false
+            },
+            situation: 'Vero Internet (parceria Watch Brasil) inclui Telecine em planos de fibra. Página de produto existe mas não há checkout direto para só o Telecine.',
+            rationale: 'Preço e disponibilidade dependem do plano e região. Usuário que quer apenas Telecine não tem caminho claro — precisa contratar combo de internet.',
+            recommendation: 'Discutir com Vero possibilidade de add-on Telecine sem obrigatoriedade de upgrade de plano de internet.',
+            tags: [{c:'tag-wa',l:'Incluso em combo'},{c:'tag-wa',l:'Depende do plano'},{c:'tag-in',l:'Fibra óptica'}],
+            source: 'querovero.com.br · 2026'
+          }
+        },
+        {
+          id: 'watch', name: 'Watch Brasil', host: 'watch.tv.br · rede ISPs',
+          kind: 'isp', kindLabel: 'Distribuidor B2B',
+          url: 'https://descubra.watch.tv.br/',
+          baseline: {
+            status: 'wa',
+            price: { value: 'Via ISP local', detail: 'Distribuidor para 4.500+ ISPs · consumidor assina pelo ISP parceiro', hasPromo: false },
+            journey: {
+              stepsToCheckout: 0, priceVisible: false, requiresCEP: false,
+              requiresLogin: false, ctaClarity: 0, friction: 5,
+              estimatedTime: '—', offersPromo: false
+            },
+            situation: 'Landing page B2B da Watch Brasil — destinada a ISPs que querem distribuir Telecine, não ao consumidor final.',
+            rationale: 'URL descubra.watch.tv.br é voltada a provedores. Consumidor assina via ISP parceiro da Watch (Alloha, Ligga, Alares, Vero etc.).',
+            recommendation: 'Reclassificar como distribuidor B2B, não canal direto. Monitorar os ISPs parceiros individualmente.',
+            tags: [{c:'tag-wa',l:'B2B · não canal direto'},{c:'tag-in',l:'4.500+ ISPs parceiros'}],
+            source: 'Watch Brasil · 2025'
+          }
+        },
+        {
+          id: 'celeti', name: 'Celeti HUB', host: 'materiais.celeti.com.br',
+          kind: 'isp', kindLabel: 'Distribuidor B2B',
+          url: 'https://materiais.celeti.com.br/telecine',
+          baseline: {
+            status: 'wa',
+            price: { value: 'Via ISP parceiro', detail: 'Canal B2B · parceria desde dez/2023', hasPromo: false },
+            journey: {
+              stepsToCheckout: 0, priceVisible: false, requiresCEP: false,
+              requiresLogin: false, ctaClarity: 0, friction: 5,
+              estimatedTime: '—', offersPromo: false
+            },
+            situation: 'Formulário de captação B2B para ISPs interessados em distribuir Telecine. Não é canal de venda ao consumidor.',
+            rationale: 'URL exclusivamente para ISPs parceiros Celeti. Consumidor final assina via um dos ISPs da rede.',
+            recommendation: 'Igual ao Watch Brasil — reclassificar como distribuidor B2B. Remover do monitoramento de jornada de compra do consumidor.',
+            tags: [{c:'tag-wa',l:'B2B · não canal direto'},{c:'tag-in',l:'Desde dez/2023'}],
+            source: 'Celeti HUB · 2024'
+          }
+        }
+      ]
+    }
+  ]
+};
+
+const ALL_CHANNELS = CATALOG.groups.flatMap(g => g.channels);
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE: STATE
+═══════════════════════════════════════════════════════════ */
+const state = {
+  results: {},          // channelId -> result object
+  scanning: false,
+  lastScan: null,
+
+  init() {
+    ALL_CHANNELS.forEach(ch => {
+      this.results[ch.id] = { ...ch.baseline, _source: 'baseline' };
+    });
+  },
+
+  get(id) { return this.results[id]; },
+
+  set(id, value) {
+    this.results[id] = value;
+    render.card(id);
+    render.kpis();
+  },
+
+  setChecking(id) {
+    const prev = this.results[id];
+    this.results[id] = { ...prev, status: 'checking' };
+    render.card(id);
+  },
+
+  restoreBaseline(id) {
+    const ch = ALL_CHANNELS.find(c => c.id === id);
+    if (ch) this.results[id] = { ...ch.baseline, _source: 'baseline' };
+    render.card(id);
+    render.kpis();
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE: UTILS
+═══════════════════════════════════════════════════════════ */
+const utils = {
+  // Extract JSON with bracket-depth counting (handles nested objects)
+  extractJSON(text) {
+    const start = text.indexOf('{');
+    if (start < 0) return null;
+    let depth = 0;
+    for (let i = start; i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}') {
+        depth--;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
+    }
+    return null;
+  },
+
+  // Health score (0-100) from journey dimensions
+  healthScore(r) {
+    if (!r || r.status === 'checking' || r.status === 'idle') return null;
+    if (r.status === 'er') return 0;
+    const j = r.journey || {};
+    let score = 100;
+    // Friction penalty (0-40 points)
+    score -= ((j.friction || 3) - 1) * 10;
+    // Price visibility penalty
+    if (!j.priceVisible) score -= 15;
+    // CEP requirement penalty
+    if (j.requiresCEP) score -= 8;
+    // Steps penalty (over 4 steps starts to hurt)
+    if (j.stepsToCheckout > 4) score -= (j.stepsToCheckout - 4) * 4;
+    // CTA clarity bonus/penalty
+    score += (j.ctaClarity - 3) * 3;
+    // Status cap
+    if (r.status === 'wa') score = Math.min(score, 70);
+    return Math.max(0, Math.min(100, Math.round(score)));
+  },
+
+  healthClass(score) {
+    if (score === null) return '';
+    if (score >= 75) return 'ok';
+    if (score >= 45) return 'wa';
+    return 'er';
+  },
+
+  frictionLabel(friction) {
+    return ['Sem atrito', 'Mínimo', 'Moderado', 'Alto', 'Muito alto'][Math.max(0, Math.min(4, friction - 1))] || '—';
+  },
+
+  frictionColor(friction) {
+    return ['#1F6B3A', '#3A9050', '#D89010', '#C04020', '#8B1A1A'][Math.max(0, Math.min(4, friction - 1))];
+  },
+
+  statusLabel(s) {
+    return {ok: '✓ Funciona', wa: '⚠ Atenção', er: '✗ Problema', checking: 'Verificando…', idle: 'Aguardando'}[s] || '—';
+  },
+
+  statusClass(s) {
+    return {ok: 'ok', wa: 'wa', er: 'er', checking: 'chk', idle: 'idle'}[s] || 'idle';
+  },
+
+  timestamp() {
+    return new Date().toLocaleTimeString('pt-BR');
+  },
+
+  dateStamp() {
+    return new Date().toISOString().slice(0, 10);
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE: LOG
+═══════════════════════════════════════════════════════════ */
+const logger = {
+  show() { document.getElementById('logWrap').style.display = 'block'; },
+  clear() { document.getElementById('logBody').innerHTML = ''; },
+  line(msg, type = 'info') {
+    const body = document.getElementById('logBody');
+    const div = document.createElement('div');
+    div.className = 'log-line ' + type;
+    div.textContent = `[${utils.timestamp()}] ${msg}`;
+    body.appendChild(div);
+    body.scrollTop = body.scrollHeight;
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE: RENDER
+═══════════════════════════════════════════════════════════ */
+const render = {
+  // KPI strip
+  kpis() {
+    const all = Object.values(state.results);
+    const active = ALL_CHANNELS.filter(c => !c.skip);
+    const ok = all.filter(r => r.status === 'ok').length;
+    const wa = all.filter(r => r.status === 'wa').length;
+    const er = all.filter(r => r.status === 'er').length;
+
+    // Avg health score across active channels
+    const scores = active.map(c => utils.healthScore(state.results[c.id])).filter(s => s !== null);
+    const avgHealth = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+
+    const html = `
+      <div class="kpi">
+        <div class="kpi-lbl">Total de canais</div>
+        <div class="kpi-val neu">${ALL_CHANNELS.length}</div>
+        <div class="kpi-sub">${active.length} ativos · ${ALL_CHANNELS.length - active.length} encerrado</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Funcionando</div>
+        <div class="kpi-val ok">${ok || '—'}</div>
+        <div class="kpi-sub">Jornada de compra operando</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Atenção</div>
+        <div class="kpi-val wa">${wa || '—'}</div>
+        <div class="kpi-sub">Requer investigação</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Problema</div>
+        <div class="kpi-val er">${er || '—'}</div>
+        <div class="kpi-sub">Link quebrado ou encerrado</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Health score médio</div>
+        <div class="kpi-val in">${avgHealth !== null ? avgHealth : '—'}<span style="font-size:14px;color:var(--ink3);font-weight:500">/100</span></div>
+        <div class="kpi-sub">Qualidade geral da jornada</div>
+      </div>
+    `;
+    document.getElementById('kpis').innerHTML = html;
+
+    // Section meta
+    const pct = active.length ? Math.round((ok / active.length) * 100) : 0;
+    document.getElementById('secMeta').innerHTML = state.lastScan
+      ? `<strong>${pct}%</strong> funcionando · última verificação ao vivo: <strong>${state.lastScan}</strong>`
+      : `<strong>${pct}%</strong> funcionando · dados da pesquisa abr/2026`;
+  },
+
+  // Single channel card
+  cardHTML(ch) {
+    const r = state.get(ch.id);
+    const s = r.status;
+    const cardCls = 'st-' + utils.statusClass(s);
+    const checking = s === 'checking';
+    const skipped = ch.skip;
+
+    const j = r.journey || {};
+    const health = utils.healthScore(r);
+    const healthCls = utils.healthClass(health);
+
+    // Price display
+    let priceHTML;
+    if (checking) {
+      priceHTML = `<span class="metric-val muted">Verificando…</span>`;
+    } else if (!r.price) {
+      priceHTML = `<span class="metric-val muted">Não disponível</span>`;
+    } else if (r.price.hasPromo) {
+      priceHTML = `<span class="metric-val promo big">${r.price.value}</span>`;
+    } else {
+      priceHTML = `<span class="metric-val price big">${r.price.value}</span>`;
+    }
+    const priceSub = r.price?.detail && !checking ? `<div class="metric-sub">${r.price.detail}</div>` : '';
+
+    // Friction score
+    const frictionHTML = checking ? `<span class="metric-val muted">—</span>` : (() => {
+      const dots = [1,2,3,4,5].map(i => {
+        const filled = i <= j.friction;
+        const color = filled ? utils.frictionColor(j.friction) : 'var(--line)';
+        return `<div class="score-dot" style="background:${color}"></div>`;
+      }).join('');
+      return `<div class="score-dots">${dots}<span class="score-label">${utils.frictionLabel(j.friction)}</span></div>`;
+    })();
+
+    // Health score
+    const healthHTML = health === null ? `<span class="metric-val muted">—</span>` : `
+      <div class="health-score">
+        <div class="health-bar"><div class="health-fill ${healthCls}" style="width:${health}%"></div></div>
+        <span class="health-num ${healthCls === 'ok' ? 'price' : healthCls === 'er' ? 'price-hidden' : ''}" style="color:var(--${healthCls === 'ok' ? 'ok' : healthCls === 'er' ? 'er' : 'wa'})">${health}</span>
+      </div>
+    `;
+
+    // Verify button (disabled for skipped or scanning)
+    const verifyBtn = skipped ? '' : `<button class="verify-btn" id="vb-${ch.id}" onclick="scan.runOne('${ch.id}')" ${state.scanning ? 'disabled' : ''}>↻ Verificar</button>`;
+
+    // Status pill
+    const statusCls = utils.statusClass(s);
+    const pillHTML = `
+      <span class="status-pill pill-${statusCls}">
+        <span class="pill-dot dot-${statusCls}"></span>${utils.statusLabel(s)}
+      </span>
+    `;
+
+    // Source stamp
+    const srcTxt = r._source === 'verified' ? '⟳ verificado agora' : r.source || '';
+    const srcHTML = srcTxt && !checking ? `<div class="src-stamp">${srcTxt}</div>` : '';
+
+    // Detail section (expanded)
+    const detailHTML = (checking || !r.rationale) ? '' : `
+      <div class="card-detail">
+        <div class="detail-item">
+          <div class="detail-lbl">Motivo do status</div>
+          <div class="detail-val ${statusCls}">${r.rationale}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-lbl">Ação sugerida</div>
+          <div class="detail-val">${r.recommendation || '—'}</div>
+        </div>
+        <div class="detail-item full">
+          <div class="detail-lbl">Dimensões da jornada</div>
+          <div class="dims-grid">
+            <div class="dim">
+              <div class="dim-lbl">Passos até checkout</div>
+              <div class="dim-val ${j.stepsToCheckout <= 3 ? 'good' : j.stepsToCheckout <= 5 ? 'warn' : 'bad'}">${j.stepsToCheckout ? '~' + j.stepsToCheckout + ' passos' : '—'}</div>
+            </div>
+            <div class="dim">
+              <div class="dim-lbl">Tempo estimado</div>
+              <div class="dim-val">${j.estimatedTime || '—'}</div>
+            </div>
+            <div class="dim">
+              <div class="dim-lbl">Preço visível</div>
+              <div class="dim-val ${j.priceVisible ? 'good' : 'warn'}">${j.priceVisible ? '✓ Sem login' : '✗ Requer ação'}</div>
+            </div>
+            <div class="dim">
+              <div class="dim-lbl">Exige CEP</div>
+              <div class="dim-val ${j.requiresCEP ? 'warn' : 'good'}">${j.requiresCEP ? '✗ Sim' : '✓ Não'}</div>
+            </div>
+            <div class="dim">
+              <div class="dim-lbl">Exige login</div>
+              <div class="dim-val ${j.requiresLogin ? 'warn' : 'good'}">${j.requiresLogin ? '✗ Sim' : '✓ Não'}</div>
+            </div>
+            <div class="dim">
+              <div class="dim-lbl">Clareza do CTA</div>
+              <div class="dim-val ${j.ctaClarity >= 4 ? 'good' : j.ctaClarity >= 3 ? 'warn' : 'bad'}">${j.ctaClarity || '—'}/5</div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-item full">
+          <div class="detail-lbl">URL de compra</div>
+          <div class="detail-val"><a href="${ch.url}" target="_blank" rel="noopener">${ch.url}</a></div>
+        </div>
+        ${r.tags?.length ? `
+          <div class="detail-item full">
+            <div class="detail-lbl">Tags</div>
+            <div class="tags">${r.tags.map(t => `<span class="tag ${t.c}">${t.l}</span>`).join('')}</div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    return `
+      <article class="card ${cardCls} fade-in" data-id="${ch.id}">
+        <div class="card-main">
+          <div class="ch-id">
+            <div class="ch-name">${ch.name}</div>
+            <div class="ch-host">${ch.host}</div>
+            <span class="ch-kind kind-${ch.kind[0]}">${ch.kindLabel}</span>
+          </div>
+          <div class="ch-metrics">
+            <div class="metric">
+              <div class="metric-lbl">Oferta atual</div>
+              ${priceHTML}
+              ${priceSub}
+            </div>
+            <div class="metric">
+              <div class="metric-lbl">Atrito na jornada</div>
+              ${frictionHTML}
+              <div class="metric-sub">${checking ? '' : (j.stepsToCheckout ? `~${j.stepsToCheckout} passos · ${j.estimatedTime || 'n/d'}` : '')}</div>
+            </div>
+            <div class="metric">
+              <div class="metric-lbl">Health score</div>
+              ${healthHTML}
+              <div class="metric-sub">${checking ? '' : (health >= 75 ? 'Boa qualidade' : health >= 45 ? 'Precisa revisar' : 'Crítico')}</div>
+            </div>
+            <div class="metric">
+              <div class="metric-lbl">Situação</div>
+              <div class="metric-val" style="font-size:11.5px;font-weight:400;color:var(--ink2)">${checking ? 'Buscando dados…' : (r.situation || '—')}</div>
+              ${srcHTML}
+            </div>
+          </div>
+          <div class="ch-status">
+            ${pillHTML}
+            ${verifyBtn}
+          </div>
+        </div>
+        ${detailHTML}
+      </article>
+    `;
+  },
+
+  // All channels
+  all() {
+    const root = document.getElementById('channelsRoot');
+    let html = '';
+    CATALOG.groups.forEach(g => {
+      html += `<div class="group-head">${g.label} <span class="count">(${g.channels.length})</span></div>`;
+      html += `<div class="cards">`;
+      g.channels.forEach(ch => { html += this.cardHTML(ch); });
+      html += `</div>`;
+    });
+    root.innerHTML = html;
+    this.kpis();
+  },
+
+  // Single card update (in place)
+  card(id) {
+    const ch = ALL_CHANNELS.find(c => c.id === id);
+    if (!ch) return;
+    const el = document.querySelector(`article.card[data-id="${id}"]`);
+    if (!el) return this.all();
+    el.outerHTML = this.cardHTML(ch);
+    this.kpis();
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE: SCAN — AI-powered verification
+═══════════════════════════════════════════════════════════ */
+const scan = {
+  async runOne(id) {
+    if (state.scanning) return;
+    const ch = ALL_CHANNELS.find(c => c.id === id);
+    if (!ch || ch.skip) return;
+
+    state.scanning = true;
+    logger.show();
+    document.getElementById('runBtn').disabled = true;
+    state.setChecking(id);
+    logger.line(`→ Verificando ${ch.name}…`, 'info');
+
+    try {
+      const verified = await this._aiVerify(ch);
+      state.set(id, { ...verified, _source: 'verified' });
+      const s = verified.status;
+      const label = s === 'ok' ? '✓' : s === 'er' ? '✗' : '⚠';
+      const cls = s === 'ok' ? 'ok' : s === 'er' ? 'err' : 'warn';
+      logger.line(`${label} ${ch.name}: ${s.toUpperCase()} · ${verified.price?.value || 'preço não disponível'}`, cls);
+    } catch (e) {
+      state.restoreBaseline(id);
+      logger.line(`⚠ ${ch.name}: ${e.message} — mantendo dados da pesquisa`, 'warn');
+    }
+
+    state.scanning = false;
+    document.getElementById('runBtn').disabled = false;
+    render.all(); // re-render to unlock all verify buttons
+  },
+
+  async runAll() {
+    if (state.scanning) return;
+    state.scanning = true;
+    this._setExports(false);
+
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin">↻</span> Verificando…';
+
+    logger.show();
+    logger.clear();
+
+    const toCheck = ALL_CHANNELS.filter(c => !c.skip);
+    logger.line(`Varredura: ${toCheck.length} canais · sequencial (2s entre chamadas)`, 'info');
+
+    for (const ch of toCheck) {
+      state.setChecking(ch.id);
+      logger.line(`→ ${ch.name}…`, 'info');
+
+      try {
+        const verified = await this._aiVerify(ch);
+        state.set(ch.id, { ...verified, _source: 'verified' });
+        const s = verified.status;
+        const label = s === 'ok' ? '✓' : s === 'er' ? '✗' : '⚠';
+        const cls = s === 'ok' ? 'ok' : s === 'er' ? 'err' : 'warn';
+        logger.line(`${label} ${ch.name}: ${s.toUpperCase()} · ${verified.price?.value || 'preço não disponível'}`, cls);
+      } catch (e) {
+        state.restoreBaseline(ch.id);
+        logger.line(`⚠ ${ch.name}: ${e.message}`, 'warn');
+      }
+
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    state.lastScan = new Date().toLocaleString('pt-BR');
+    logger.line(`Concluído · ${state.lastScan}`, 'ok');
+
+    state.scanning = false;
+    btn.disabled = false;
+    btn.innerHTML = '▶ Verificar todos';
+    this._setExports(true);
+    render.all();
+  },
+
+  _setExports(on) {
+    ['btnXls', 'btnPdf', 'btnImg'].forEach(id => {
+      document.getElementById(id).disabled = !on;
+    });
+  },
+
+  async _aiVerify(ch) {
+    const prompt = `Você é especialista em qualidade de jornada de compra digital. Analise o canal de venda do Telecine abaixo e retorne uma análise multidimensional.
+
+CANAL: ${ch.name}
+URL DO BOTÃO DE COMPRA: ${ch.url}
+TIPO: ${ch.kindLabel}
+DATA DA ANÁLISE: abril de 2026
+
+Use web_search para coletar dados atuais sobre:
+(a) se a URL está ativa e funcional
+(b) preço atual do Telecine neste canal
+(c) qualidade da jornada de compra (quantos cliques, exige CEP, exige login, preço visível)
+(d) promoções ativas
+
+Retorne JSON com esta estrutura EXATA (sem markdown, sem texto extra):
+
+{
+  "status": "ok | wa | er",
+  "price": {
+    "value": "R$ X,XX/mês ou descrição curta",
+    "detail": "detalhe adicional sobre o preço, promoções, planos",
+    "hasPromo": true/false
+  },
+  "journey": {
+    "stepsToCheckout": 3,
+    "priceVisible": true/false,
+    "requiresCEP": true/false,
+    "requiresLogin": true/false,
+    "ctaClarity": 1-5,
+    "friction": 1-5,
+    "estimatedTime": "~3 min",
+    "offersPromo": true/false
+  },
+  "situation": "1 frase objetiva sobre o que o usuário vê na página",
+  "rationale": "1-2 frases específicas explicando o motivo do status",
+  "recommendation": "1 frase acionável para o gestor de produto",
+  "tags": [{"c":"tag-ok|tag-wa|tag-er|tag-in|tag-pr","l":"texto curto"}],
+  "source": "fonte verificada (ex: site.com.br · abr/2026)"
+}
+
+CRITÉRIOS:
+- status "ok": URL ativa, preço visível, botão de compra presente
+- status "wa": URL ativa MAS preço escondido, fluxo complexo, ou exige barreiras (CEP/login)
+- status "er": URL quebrada, produto removido ou parceria encerrada
+
+- friction 1 = jornada ideal · 3 = barreiras moderadas (CEP ou login) · 5 = impossível comprar
+- ctaClarity 1 = CTA confuso · 5 = CTA direto e bem sinalizado
+- stepsToCheckout = número inteiro de cliques/passos até a tela de pagamento`;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || `HTTP ${resp.status}`);
+
+    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+    if (!text.trim()) throw new Error('Resposta vazia da API');
+
+    const json = utils.extractJSON(text);
+    if (!json) throw new Error('JSON não encontrado na resposta');
+
+    const parsed = JSON.parse(json);
+
+    // Validate & normalize
+    return {
+      status: ['ok', 'wa', 'er'].includes(parsed.status) ? parsed.status : 'wa',
+      price: parsed.price || null,
+      journey: {
+        stepsToCheckout: parsed.journey?.stepsToCheckout || 0,
+        priceVisible: !!parsed.journey?.priceVisible,
+        requiresCEP: !!parsed.journey?.requiresCEP,
+        requiresLogin: !!parsed.journey?.requiresLogin,
+        ctaClarity: parsed.journey?.ctaClarity || 3,
+        friction: parsed.journey?.friction || 3,
+        estimatedTime: parsed.journey?.estimatedTime || '—',
+        offersPromo: !!parsed.journey?.offersPromo
+      },
+      situation: parsed.situation || '—',
+      rationale: parsed.rationale || '',
+      recommendation: parsed.recommendation || '',
+      tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+      source: parsed.source || 'Verificado agora'
+    };
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE: EXPORT
+═══════════════════════════════════════════════════════════ */
+const exp = {
+  _showOverlay(msg) {
+    document.getElementById('overlayMsg').textContent = msg;
+    document.getElementById('overlay').classList.add('show');
+  },
+  _hideOverlay() { document.getElementById('overlay').classList.remove('show'); },
+
+  _buildRows() {
+    const rows = [];
+    CATALOG.groups.forEach(g => {
+      g.channels.forEach(ch => {
+        const r = state.get(ch.id) || {};
+        const j = r.journey || {};
+        const statusMap = {ok: '✓ Funciona', wa: '⚠ Atenção', er: '✗ Problema'};
+        const health = utils.healthScore(r);
+        rows.push({
+          'Grupo': g.label,
+          'Canal': ch.name,
+          'Host': ch.host,
+          'Tipo': ch.kindLabel,
+          'URL de compra': ch.url,
+          'Status': ch.skip ? '✗ Encerrado' : (statusMap[r.status] || '—'),
+          'Fonte dado': r._source === 'verified' ? 'Verificado ao vivo' : (r.source || 'Baseline'),
+          'Health score': health !== null ? health + '/100' : '—',
+          'Oferta': r.price?.value || '—',
+          'Detalhe preço': r.price?.detail || '—',
+          'Promoção ativa': r.price?.hasPromo ? 'Sim' : 'Não',
+          'Passos até checkout': j.stepsToCheckout || '—',
+          'Tempo estimado': j.estimatedTime || '—',
+          'Preço visível': j.priceVisible ? 'Sim' : 'Não',
+          'Exige CEP': j.requiresCEP ? 'Sim' : 'Não',
+          'Exige login': j.requiresLogin ? 'Sim' : 'Não',
+          'Clareza CTA (1-5)': j.ctaClarity || '—',
+          'Atrito (1-5)': j.friction || '—',
+          'Situação': r.situation || '—',
+          'Motivo do status': r.rationale || '—',
+          'Ação sugerida': r.recommendation || '—',
+          'Tags': (r.tags || []).map(t => t.l).join(', ') || '—'
+        });
+      });
+    });
+    return rows;
+  },
+
+  xls() {
+    if (typeof XLSX === 'undefined') { alert('Biblioteca XLS não carregou.'); return; }
+    this._showOverlay('Gerando planilha XLS…');
+    setTimeout(() => {
+      try {
+        const rows = this._buildRows();
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [
+          {wch:32},{wch:24},{wch:24},{wch:18},{wch:55},{wch:14},{wch:20},{wch:14},
+          {wch:22},{wch:40},{wch:12},{wch:16},{wch:16},{wch:14},{wch:12},{wch:12},
+          {wch:14},{wch:12},{wch:50},{wch:55},{wch:55},{wch:40}
+        ];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Jornada de Compra');
+
+        const ok = rows.filter(r => r['Status'].includes('Funciona')).length;
+        const er = rows.filter(r => r['Status'].includes('Problema') || r['Status'].includes('Encerrado')).length;
+        const wa = rows.filter(r => r['Status'].includes('Atenção')).length;
+        const scores = rows.map(r => parseInt(r['Health score'])).filter(n => !isNaN(n));
+        const avgHealth = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+
+        const summary = XLSX.utils.aoa_to_sheet([
+          ['Telecine · Monitor de Jornada de Compra'],
+          ['Gerado em:', new Date().toLocaleString('pt-BR')],
+          [],
+          ['Total de canais', ALL_CHANNELS.length],
+          ['✓ Funcionando', ok],
+          ['⚠ Atenção', wa],
+          ['✗ Problema/Encerrado', er],
+          ['Health score médio', avgHealth + '/100']
+        ]);
+        summary['!cols'] = [{wch:28},{wch:22}];
+        XLSX.utils.book_append_sheet(wb, summary, 'Resumo');
+
+        XLSX.writeFile(wb, `telecine_jornada_${utils.dateStamp()}.xlsx`);
+      } catch (e) {
+        alert('Erro ao gerar XLS: ' + e.message);
+      } finally { this._hideOverlay(); }
+    }, 80);
+  },
+
+  pdf() {
+    if (typeof window.jspdf === 'undefined') { alert('Biblioteca PDF não carregou.'); return; }
+    this._showOverlay('Gerando PDF…');
+    setTimeout(() => {
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const W = doc.internal.pageSize.getWidth();
+        const now = new Date().toLocaleString('pt-BR');
+
+        // Header
+        doc.setFillColor(200, 37, 31);
+        doc.rect(0, 0, W, 12, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('Telecine · Monitor de Jornada de Compra', 10, 8);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.text('Gerado em: ' + now, W - 10, 8, { align: 'right' });
+
+        // Stats
+        const rows = this._buildRows();
+        const ok = rows.filter(r => r['Status'].includes('Funciona')).length;
+        const er = rows.filter(r => r['Status'].includes('Problema') || r['Status'].includes('Encerrado')).length;
+        const wa = rows.filter(r => r['Status'].includes('Atenção')).length;
+        const scores = rows.map(r => parseInt(r['Health score'])).filter(n => !isNaN(n));
+        const avgHealth = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+
+        doc.setTextColor(55, 55, 55);
+        doc.setFontSize(7.5);
+        doc.text(`Total: ${ALL_CHANNELS.length}  ·  ✓ ${ok}  ·  ⚠ ${wa}  ·  ✗ ${er}  ·  Health médio: ${avgHealth}/100`, 10, 19);
+
+        // Table
+        const body = [];
+        CATALOG.groups.forEach(g => {
+          body.push([{
+            content: g.label, colSpan: 8,
+            styles: { fillColor: [240, 239, 235], textColor: [90, 90, 85], fontStyle: 'bold', fontSize: 7, cellPadding: 2 }
+          }]);
+          g.channels.forEach(ch => {
+            const r = state.get(ch.id) || {};
+            const j = r.journey || {};
+            const sMap = {ok:'✓ Funciona',wa:'⚠ Atenção',er:'✗ Problema'};
+            const health = utils.healthScore(r);
+            const diag = [
+              r.situation ? 'Situação: ' + r.situation : '',
+              r.rationale ? 'Motivo: ' + r.rationale : '',
+              r.recommendation ? 'Ação: ' + r.recommendation : ''
+            ].filter(Boolean).join('\n');
+
+            body.push([
+              ch.name + '\n(' + ch.kindLabel + ')',
+              ch.url,
+              ch.skip ? '✗ Encerrado' : (sMap[r.status] || '—'),
+              r.price?.value || '—',
+              health !== null ? health + '/100' : '—',
+              j.friction ? j.friction + '/5' : '—',
+              `P: ${j.priceVisible?'✓':'✗'} CEP: ${j.requiresCEP?'✗':'✓'} Login: ${j.requiresLogin?'✗':'✓'}`,
+              diag || '—'
+            ]);
+          });
+        });
+
+        doc.autoTable({
+          startY: 22,
+          head: [['Canal', 'URL', 'Status', 'Oferta', 'Health', 'Atrito', 'Barreiras', 'Diagnóstico + Ação']],
+          body,
+          styles: { fontSize: 6.5, cellPadding: 2.2, overflow: 'linebreak', lineColor: [215, 214, 210], lineWidth: 0.2, valign: 'top' },
+          headStyles: { fillColor: [245, 244, 240], textColor: [80, 80, 75], fontStyle: 'bold', fontSize: 7 },
+          columnStyles: {
+            0: { cellWidth: 28 },
+            1: { cellWidth: 48, textColor: [31, 69, 144], fontSize: 6 },
+            2: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
+            3: { cellWidth: 22 },
+            4: { cellWidth: 16, halign: 'center' },
+            5: { cellWidth: 12, halign: 'center' },
+            6: { cellWidth: 30, fontSize: 6 },
+            7: { cellWidth: 96 }
+          },
+          didParseCell(d) {
+            if (d.section === 'body' && d.column.index === 2) {
+              const v = String(d.cell.raw || '');
+              if (v.includes('Funciona')) d.cell.styles.textColor = [31, 107, 58];
+              else if (v.includes('Problema') || v.includes('Encerrado')) d.cell.styles.textColor = [139, 26, 26];
+              else if (v.includes('Atenção')) d.cell.styles.textColor = [138, 90, 14];
+            }
+          },
+          didDrawPage() {
+            const pg = doc.internal.getCurrentPageInfo().pageNumber;
+            const pH = doc.internal.pageSize.getHeight();
+            doc.setFontSize(7);
+            doc.setTextColor(160, 160, 155);
+            doc.text('Telecine · Monitor de Jornada de Compra', 10, pH - 4);
+            doc.text('Pág. ' + pg, W - 10, pH - 4, { align: 'right' });
+          }
+        });
+
+        doc.save(`telecine_jornada_${utils.dateStamp()}.pdf`);
+      } catch (e) {
+        alert('Erro ao gerar PDF: ' + e.message);
+      } finally { this._hideOverlay(); }
+    }, 80);
+  },
+
+  async img() {
+    if (typeof html2canvas === 'undefined') { alert('Biblioteca de imagem não carregou.'); return; }
+    this._showOverlay('Capturando imagem…');
+    try {
+      const canvas = await html2canvas(document.getElementById('channelsRoot'), {
+        scale: 2, useCORS: true, backgroundColor: '#F5F4EF', logging: false
+      });
+      const a = document.createElement('a');
+      a.download = `telecine_jornada_${utils.dateStamp()}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    } catch (e) {
+      alert('Erro ao gerar imagem: ' + e.message);
+    } finally { this._hideOverlay(); }
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE: SHARE
+═══════════════════════════════════════════════════════════ */
+const share = {
+  emails: [],
+
+  open() {
+    document.getElementById('shareModal').classList.add('show');
+    document.getElementById('shareResult').className = 'share-result';
+    setTimeout(() => document.getElementById('emailInput').focus(), 100);
+  },
+
+  close() { document.getElementById('shareModal').classList.remove('show'); },
+  bgClose(e) { if (e.target.id === 'shareModal') this.close(); },
+  focus() { document.getElementById('emailInput').focus(); },
+
+  _isValid(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()); },
+
+  add(raw) {
+    const email = raw.trim().replace(/[,;]+$/, '').trim();
+    if (!email) return;
+    if (this.emails.includes(email)) return;
+    this.emails.push(email);
+    this._render();
+    document.getElementById('shareResult').className = 'share-result';
+  },
+
+  remove(email) {
+    this.emails = this.emails.filter(e => e !== email);
+    this._render();
+  },
+
+  _render() {
+    const field = document.getElementById('emailField');
+    const input = document.getElementById('emailInput');
+    [...field.querySelectorAll('.email-tag')].forEach(el => el.remove());
+    this.emails.forEach(email => {
+      const tag = document.createElement('span');
+      tag.className = 'email-tag' + (this._isValid(email) ? '' : ' bad');
+      tag.innerHTML = `${email}<button class="email-rm" onclick="share.remove('${email}')">×</button>`;
+      field.insertBefore(tag, input);
+    });
+  },
+
+  keyHandler(e) {
+    const input = e.target;
+    if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
+      e.preventDefault();
+      this.add(input.value);
+      input.value = '';
+    } else if (e.key === 'Backspace' && input.value === '' && this.emails.length > 0) {
+      this.remove(this.emails[this.emails.length - 1]);
+    }
+  },
+
+  commit() {
+    const input = document.getElementById('emailInput');
+    if (input.value.trim()) {
+      this.add(input.value);
+      input.value = '';
+    }
+  },
+
+  _result(msg, ok) {
+    const el = document.getElementById('shareResult');
+    el.textContent = msg;
+    el.className = 'share-result ' + (ok ? 'ok' : 'err');
+  },
+
+  copy() {
+    this.commit();
+    if (!this.emails.length) { this._result('Adicione pelo menos um email.', false); return; }
+    const invalid = this.emails.filter(e => !this._isValid(e));
+    if (invalid.length) { this._result('Inválidos: ' + invalid.join(', '), false); return; }
+    navigator.clipboard.writeText(this.emails.join(', '))
+      .then(() => this._result('✓ Emails copiados: ' + this.emails.join(', '), true))
+      .catch(() => this._result('Lista: ' + this.emails.join(', '), false));
+  },
+
+  mailto() {
+    this.commit();
+    if (!this.emails.length) { this._result('Adicione pelo menos um email.', false); return; }
+    const invalid = this.emails.filter(e => !this._isValid(e));
+    if (invalid.length) { this._result('Corrija os emails inválidos: ' + invalid.join(', '), false); return; }
+
+    const vals = Object.values(state.results);
+    const ok = vals.filter(r => r.status === 'ok').length;
+    const er = vals.filter(r => r.status === 'er').length;
+    const wa = vals.filter(r => r.status === 'wa').length;
+    const scores = ALL_CHANNELS.filter(c=>!c.skip).map(c => utils.healthScore(state.get(c.id))).filter(s=>s!==null);
+    const avgHealth = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+
+    const now = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const userMsg = document.getElementById('shareMsg').value.trim();
+    const subject = encodeURIComponent('Monitor de Jornada de Compra · Telecine (' + now + ')');
+
+    const statusLine = `${ALL_CHANNELS.length} canais · ✓ ${ok} ok · ⚠ ${wa} atenção · ✗ ${er} problema · Health ${avgHealth}/100`;
+
+    const body = encodeURIComponent(
+      (userMsg ? userMsg + '\n\n' : '') +
+      '────────────────────────────────\n' +
+      'MONITOR DE JORNADA DE COMPRA · TELECINE\n' +
+      now + '\n' +
+      statusLine + '\n' +
+      '────────────────────────────────\n\n' +
+      'Anexo: telecine_jornada.html\n' +
+      'Abra o arquivo no navegador (funciona offline).\n\n' +
+      'Recursos:\n' +
+      '· Status de cada canal de venda\n' +
+      '· Preços e ofertas atuais\n' +
+      '· Análise multidimensional da jornada (atrito, CEP, login, CTA)\n' +
+      '· Health score por canal\n' +
+      '· Diagnóstico com ação sugerida'
+    );
+
+    const url = `mailto:${this.emails.join(',')}?subject=${subject}&body=${body}`;
+    window.location.href = url.length > 2000
+      ? `mailto:${this.emails.join(',')}?subject=${subject}`
+      : url;
+
+    this._result(`✓ Email aberto para ${this.emails.length} destinatário(s). Anexe o arquivo .html!`, true);
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   BOOT
+═══════════════════════════════════════════════════════════ */
+state.init();
+render.all();
+exp._setExports = exp._setExports || (function(){});
+['btnXls','btnPdf','btnImg'].forEach(id => document.getElementById(id).disabled = false);
+</script>
+</body>
+</html>
